@@ -56,3 +56,10 @@ This stores only the SHA-256 hash of the token in `hunt.db` and returns a bearer
 }
 ```
 - **Side Effects**: Updates live position + breadcrumb track in `hunt.db`, renders live heading arrows on the Leaflet map & high-DPI Discord tactical cards, and emits `hunting/hunter_position_update` on the Blue Lodge Event Bus.
+
+---
+
+## License & Disclaimer
+
+Licensed under the **Apache License, Version 2.0** — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Provided **"AS IS"** for informational and experimental use only; verify safety-critical decisions with certified instruments and professionals.
