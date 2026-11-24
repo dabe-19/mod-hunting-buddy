@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "id": "fish_trip_scout",
+  "name": "Waterbody Conditions, Fisheries & Rigging Scout",
+  "owner": "hunting-buddy",
+  "owner_type": "module",
+  "category": "outdoors",
+  "version": "1.0.0",
+  "description": "Zero-setup fishing trip scout: pulls live USGS/GloFAS river gauges, nearby designated Trout/Walleye/Bass/Musky waters & public streams, 48h barometric/solunar windows, and produces a species-by-species rigging, depth, and wading/boat safety guide.",
+  "defaults": {
+    "max_turns": 40,
+    "ipc_priority": 100,
+    "fifo_window": 16,
+    "tool_timeout_sec": 90,
+    "require_result_json": true,
+    "output_artifact": "result.json"
+  },
+  "inputs": [
+    { "name": "property_id", "type": "number", "label": "Property / Waterbody ID", "required": false, "default": 1 },
+    { "name": "camp", "type": "string", "label": "Camp / Area Name", "required": false },
+    { "name": "target_species", "type": "string", "label": "Target Species", "required": false, "default": "Trout, Bass, Walleye & Panfish" }
+  ],
+  "tools": {
+    "bundles": ["+hunting"],
+    "allow": [
+      "hunt_fish",
+      "hunt_routes",
+      "hunt_weather",
+      "hunt_plan_save",
+      "hunt_annotate",
+      "file_read",
+      "file_write"
+    ],
+    "deny": []
+  },
+  "phases": [
+    {
+      "id": "scout_waters_and_weather",
+      "name": "Phase 1: Parallel FIFO Fisheries, River Gauges & Solunar Weather Scout",
+      "kind": "fifo_parallel",
+      "enabled": true,
+      "continue_on_error": true,
+      "timeout_sec": 60,
+      "description": "Concurrently scouts nearby designated trout/gamefish waters, public streams, live river discharge gauges, and 48h barometric/solunar bite windows.",
+      "tasks": [
+        {
+          "id": "nearby_hydro_fisheries",
+          "tool": "hunt_routes",
+          "args_template": {
+            "action": "sync_hydro",
+            "property_id": "{{params.property_id | 1}}",
+            "include_streams": true,
+            "include_roads": true,
+            "include_fisheries": true
+          },
+          "output_key": "hydro_fisheries"
+        },
+        {
+          "id": "nearby_waterbodies",
+          "tool": "hunt_fish",
+          "args_template": {
+            "action": "sync_waterbodies",
+            "property_id": "{{params.property_id | 1}}",
+            "fetch_dossiers": true,
+            "download_pdfs": true
+          },
+          "output_key": "waterbodies"
+        },
+        {
+          "id": "river_gauges",
+          "tool": "hunt_fish",
+          "args_template": {
+            "action": "gauges",
+            "property_id": "{{params.property_id | 1}}"
+          },
+          "output_key": "gauges"
+        },
+        {
+          "id": "fish_analysis",
+          "tool": "hunt_fish",
+          "args_template": {
+            "action": "analyze",
+            "property_id": "{{params.property_id | 1}}"
+          },
+          "output_key": "fish_analysis"
+        },
+        {
+          "id": "weather_48h",
+          "tool": "hunt_weather",
+          "args_template": {
+            "property_id": "{{params.property_id | 1}}",
+            "days": 2
+          },
+          "output_key": "weather"
+        }
+      ]
+    },
+    {
+      "id": "rigging_and_trip_guide",
+      "name": "Phase 2: Species Rigging, Feeding Windows & Access Guide",
+      "kind": "react",
+      "enabled": true,
+      "max_turns": 40,
+      "tool_filter": "default",
+      "tools_allow": [],
+      "prompt_template": "Act as a seasoned local fishing guide preparing a zero-friction Trip Conditions & Rigging Scout for an angler visiting this area.\n\nINPUTS:\n- Area / Camp: {{params.camp | (active location)}} (property_id: {{params.property_id | 1}})\n- Target Species: {{params.target_species | Trout, Bass, Walleye & Panfish}}\n- Output artifact path: {{result_path}}\n\nFIFO PRE-FLIGHT SCOUT DATA (ALL `+hunting` tools are ALREADY mounted on Turn 1, do NOT call `tool_search`):\n- Cached Lakes, Flowages & Official DNR Dossiers (acreage, max/mean depth, substrate, species, public boat landings, contour PDF): {{phase.scout_waters_and_weather.waterbodies}}\n- Nearby Public Streams, Trout/Gamefish Waters & Roads: {{phase.scout_waters_and_weather.hydro_fisheries}}\n- Live River Gauges (CFS / Stage / Water Temp): {{phase.scout_waters_and_weather.gauges}}\n- Bite Index & Wind-Shoreline Analysis: {{phase.scout_waters_and_weather.fish_analysis}}\n- 48h Weather (`current_conditions` & `key_hunting_windows`): {{phase.scout_waters_and_weather.weather}}\n\nMANDATORY EXECUTION STEPS:\n1. Identify the best nearby lakes, reservoirs, ponds, streams, or designated fisheries waters from the synced waterbodies & hydro/fisheries data (cite exact acreage, max depth, bottom substrate, species, and boat access where available).\n2. Explain today's & tomorrow's best feeding windows using `current_conditions`, `key_hunting_windows`, barometer trend, cloud cover, windward bank, and live CFS river flow.\n3. Deliver a clear **Tackle & Rigging Cheat Sheet** (exact lures/flies, jig weights, line recommendations, retrieve speed & depth zone for each target species) plus practical wading/boat safety notes.\n4. Archive the **FULL, COMPLETE multi-section markdown guide** via `hunt_plan_save` (`action=\"save\"`, `plan_mode=\"fish\"`, `property_id={{params.property_id | 1}}`) so the angler can read the entire guide and ask follow-up questions in the Plan Drawer. WAIT for `hunt_plan_save` to return its integer `plan_id` before writing `{{result_path}}`.\n5. Write structured JSON to `{{result_path}}` via `file_write` with keys: `workflow`, `plan_id` (the exact integer returned by `hunt_plan_save`), `plan_mode` (`\"fish\"`), `camp_name`, `wind_summary`, `top_stands` (top recommended waters/spots), `blown_stands` (conditions/areas to avoid), and `briefing_markdown` (**MUST contain the FULL multi-section markdown report — NOT a short teaser!**).\n6. Call `milestone_complete`.",
+      "gate": {
+        "type": "json_file",
+        "path": "result.json",
+        "required_keys": ["workflow", "camp_name", "top_stands", "briefing_markdown"],
+        "on_fail": "retry",
+        "max_retries": 1
+      }
+    }
+  ]
+}

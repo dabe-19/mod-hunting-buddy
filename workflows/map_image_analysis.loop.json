@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "id": "map_image_analysis",
+  "name": "Map & Trail-Cam Vision Analysis",
+  "owner": "hunting-buddy",
+  "owner_type": "module",
+  "category": "outdoors",
+  "version": "1.0.0",
+  "description": "Analyzes aerial/topo screenshots or trail-cam photos with multimodal vision, cross-references camp wind & GIS data, and saves removable tactical annotations to the live Leaflet map.",
+  "defaults": {
+    "max_turns": 200,
+    "ipc_priority": 100,
+    "fifo_window": 16,
+    "tool_timeout_sec": 120,
+    "require_result_json": true,
+    "output_artifact": "result.json"
+  },
+  "inputs": [
+    { "name": "images", "type": "images", "label": "Aerial Map / Trail-Cam Photos", "required": false },
+    { "name": "image_path", "type": "string", "label": "Direct Image Path (optional)", "required": false },
+    { "name": "camp", "type": "string", "label": "Camp / Property Name", "required": false },
+    { "name": "property_id", "type": "number", "label": "Property ID", "required": false, "default": 1 }
+  ],
+  "tools": {
+    "bundles": ["+hunting"],
+    "allow": [
+      "vision_analyze",
+      "hunt_plan",
+      "hunt_weather",
+      "hunt_import",
+      "hunt_plan_save",
+      "hunt_annotate",
+      "hunt_render_map",
+      "file_read",
+      "file_write",
+      "discord_send",
+      "discord_send_file"
+    ],
+    "deny": []
+  },
+  "phases": [
+    {
+      "id": "vision_map_analysis",
+      "name": "Phase 1: ReAct Multimodal Map & Trail-Cam Analysis",
+      "kind": "react",
+      "enabled": true,
+      "max_turns": 200,
+      "tool_filter": "default",
+      "tools_allow": [],
+      "prompt_template": "Execute the Field & Water Map & Trail-Cam Vision Analysis workflow.\n\nINPUTS:\n- Primary photo: {{params.image_path | {{primary_image}}}}\n- Extra photos: {{extra_images}}\n- Camp / Property context: {{params.camp | Field Map Analysis}} (property_id: {{params.property_id | 1}})\n- Output artifact path: {{result_path}}\n\nMANDATORY EXECUTION STEPS:\n1. Call `vision_analyze` on `{{params.image_path | {{primary_image}}}}` to inspect the image accurately (whether it is a hunting aerial/topo map, trail-cam photo, or lake bathymetric/shoreline chart — stay strictly faithful to what is actually in the image!).\n2. Cross-reference with `hunt_plan`, `hunt_fish`, or `hunt_weather` as appropriate for the image domain.\n3. Call `hunt_plan_save` (action=\"save\", property_id={{params.property_id | 1}}) to preserve your visual analysis briefing AND attach removable GeoJSON map annotations onto the live Leaflet map.\n4. Write structured JSON to `{{result_path}}` via `file_write` with keys:\n   `workflow`, `plan_id`, `camp_name`, `visual_findings`, `recommended_stand_spots` (list), `access_routes` (list), `annotations` (list), `wind_notes`, and `briefing_markdown`.\n5. Call `milestone_complete` and deliver a crisp tactical summary of the map/photo analysis.",
+      "gate": {
+        "type": "json_file",
+        "path": "result.json",
+        "required_keys": ["workflow", "camp_name", "visual_findings", "briefing_markdown"],
+        "on_fail": "retry",
+        "max_retries": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "id": "lake_contour_analysis",
+  "name": "Lake Bathymetric Contour Map Vision Analysis",
+  "owner": "hunting-buddy",
+  "owner_type": "module",
+  "category": "outdoors",
+  "version": "1.0.0",
+  "description": "Multimodal vision analysis of an official DNR or sonar bathymetric contour map PNG combined with the saved lake dossier, live river gauges, and weather to identify underwater humps, submerged channels, drop-offs, saddles, and species-specific fishing tactics.",
+  "defaults": {
+    "max_turns": 60,
+    "ipc_priority": 100,
+    "fifo_window": 16,
+    "tool_timeout_sec": 120,
+    "require_result_json": true,
+    "output_artifact": "result.json"
+  },
+  "inputs": [
+    { "name": "property_id", "type": "number", "label": "Property / Waterbody Camp ID", "required": false, "default": 1 },
+    { "name": "camp", "type": "string", "label": "Lake / Waterbody Name", "required": false },
+    { "name": "waterbody_id", "type": "number", "label": "Saved Waterbody ID", "required": false },
+    { "name": "image_path", "type": "string", "label": "Cached Bathymetric Contour Map PNG Path", "required": false },
+    { "name": "images", "type": "images", "label": "Uploaded Contour Map Image (optional)", "required": false }
+  ],
+  "tools": {
+    "bundles": ["+hunting"],
+    "allow": [
+      "vision_analyze",
+      "hunt_fish",
+      "hunt_weather",
+      "hunt_plan_save",
+      "hunt_annotate",
+      "hunt_render_map",
+      "file_read",
+      "file_write"
+    ],
+    "deny": []
+  },
+  "phases": [
+    {
+      "id": "preflight_lake_context",
+      "name": "Phase 1: Parallel FIFO Lake Dossier, Gauges & Weather Probe",
+      "kind": "fifo_parallel",
+      "enabled": true,
+      "continue_on_error": true,
+      "timeout_sec": 60,
+      "description": "Loads the saved lake dossier (acres, max depth, species, substrate, cached contour PNG path), Bite Index, live river gauges, and 48h weather before Turn 1.",
+      "tasks": [
+        {
+          "id": "fish_analysis",
+          "tool": "hunt_fish",
+          "args_template": {
+            "action": "analyze",
+            "property_id": "{{params.property_id | 1}}"
+          },
+          "output_key": "fish_analysis"
+        },
+        {
+          "id": "river_gauges",
+          "tool": "hunt_fish",
+          "args_template": {
+            "action": "gauges",
+            "property_id": "{{params.property_id | 1}}"
+          },
+          "output_key": "gauges"
+        },
+        {
+          "id": "weather_48h",
+          "tool": "hunt_weather",
+          "args_template": {
+            "property_id": "{{params.property_id | 1}}",
+            "days": 2
+          },
+          "output_key": "weather"
+        },
+        {
+          "id": "chart_vision_tiles",
+          "tool": "hunt_fish",
+          "args_template": {
+            "action": "prepare_chart_tiles",
+            "property_id": "{{params.property_id | 1}}",
+            "waterbody_id": "{{params.waterbody_id | }}",
+            "waterbody_name": "{{params.camp | }}",
+            "mask_noise": true
+          },
+          "output_key": "chart_tiles"
+        }
+      ]
+    },
+    {
+      "id": "vision_contour_analysis",
+      "name": "Phase 2: North-Up Zoomed-Tile Bathymetric Vision Analysis",
+      "kind": "react",
+      "enabled": true,
+      "max_turns": 60,
+      "tool_filter": "default",
+      "tools_allow": [],
+      "prompt_template": "Act as a master freshwater Fishing Guide & Bathymetry Analyst. You are analyzing an official LAKE BATHYMETRIC CONTOUR MAP (this is strictly a FISHING / LAKE STRUCTURE analysis — do NOT generate a deer hunting plan, treestands, or scent cones!).\n\nINPUTS:\n- Target Lake / Waterbody: {{params.camp | Lake Bathymetry}} (property_id: {{params.property_id | 1}}, waterbody_id: {{params.waterbody_id | }})\n- Raw Contour Map Image Path: {{params.image_path | {{primary_image}}}}\n- Output artifact path: {{result_path}}\n\nFIFO PRE-FLIGHT LAKE DATA (ALL `+hunting` tools + `vision_analyze` are ALREADY mounted on Turn 1 — do NOT call `tool_search`):\n- **PRE-ROTATED NORTH-UP NOISE-MASKED VISION TILES (`overview_png` + 4 zoomed `tiles` with exact global `x=nx, y=ny` coordinate ticks along every edge!):** {{phase.preflight_lake_context.chart_tiles}}\n- Saved Lake Dossiers (official `max_depth_ft`, acres, substrate, species, `has_georeferenced_chart`, `overlay_bounds`), Bite Index & Windward Shore: {{phase.preflight_lake_context.fish_analysis}}\n- Live River Gauges: {{phase.preflight_lake_context.gauges}}\n- Current Weather (`current_conditions` & `key_hunting_windows`): {{phase.preflight_lake_context.weather}}\n\nMANDATORY EXECUTION STEPS:\n1. **Inspect the North-Up Noise-Masked Overview + Zoomed Quadrant Tiles (NOT the sideways raw scan!):**\n   - Use `chart_tiles.overview_png` AND the zoomed `chart_tiles.tiles` (`nw`, `ne`, `sw`, `se`) if `chart_tiles.status == 'ok'` (only fall back to raw `image_path` if `chart_tiles` is unavailable).\n   - Every prepared image is **TRUE NORTH UP** (top=North, bottom=South, left=West, right=East) with legends, volume graphs, and neighboring lakes faded out, and exact global `x=0.xx` and `y=0.yy` tick labels stamped on all 4 borders.\n   - Call `vision_analyze` on `chart_tiles.overview_png` AND at least 2–4 of the zoomed quadrant `tiles` (you may call `vision_analyze` in parallel!) to read REAL printed contour depth labels covering **BOTH shallow shoals (`5'`, `10'`, `15'`) AND deep main-channel / dam-basin contours (`20'`, `25'`, `30'`, `35'`, `40'`, `45'`, `50'` up to `max_depth_ft`)** with exact `(nx, ny)` coordinates straight from the stamped grid ticks.\n   - **STRICT ACCURACY GUARDRAIL:** NEVER invent or report any depth deeper than the official lake dossier `max_depth_ft` (e.g. if `max_depth_ft` is 54 ft, never report 62 ft or 70 ft!). Ignore any faded marginal graphs or text outside the shoreline.\n2. **Automatic Vector Depth Contour & Structure Placement:** Call `hunt_fish` (`action=\"extract_depths_from_chart\"`, `property_id={{params.property_id | 1}}`, `waterbody_id={{params.waterbody_id | }}`, `waterbody_name=\"{{params.camp | }}\"`, `coord_space=\"aligned\"`, `clear_prior_vision=true`, `samples=[{nx, ny, depth_ft}, ...]` with **20–45 real printed depth readings including the deepest basin contours (`30'–50'`) as well as shallow `5'–20'` contours across ALL arms**, `structures=[{name, kind, nx, ny, depth_ft, notes}, ...]` with 4–6 prime underwater structures). This converts your North-up grid readings into exact GPS shoreline-clipped depth contours and fish structure pins on the live Leaflet map!\n3. **Save the COMPLETE Rich Plan FIRST (BEFORE writing `result.json`!):**\n   - Call `hunt_plan_save` (`action=\"save\"`, `plan_mode=\"fish\"`, `title=\"{{params.camp | Lake}} — Bathymetric Fishing Plan\"`, `property_id={{params.property_id | 1}}`) with your **FULL, COMPLETE angler-ready Markdown report** in `briefing_markdown` (NEVER a 1-sentence summary! Include: true-North bathymetric structure breakdown with real depths in feet, how today's barometer/wind/temp positions fish on windward vs sheltered banks, exact species-by-species approach & rigging for Walleye/Musky/Bass/Pike/Panfish, and boat access). Put top fishing zones in `top_stands` (`{name, score, rationale}`) and low-percentage zones in `blown_stands`.\n   - **WAIT for `hunt_plan_save` to return its `plan_id` BEFORE calling `file_write` on `{{result_path}}`!**\n4. **Write Complete `result.json`:** In the NEXT turn after receiving `plan_id`, write structured JSON to `{{result_path}}` via `file_write` with keys: `workflow` (`\"lake_contour_analysis\"`), `plan_id` (the EXACT integer returned by `hunt_plan_save`), `plan_mode` (`\"fish\"`), `camp_name`, `visual_findings`, `top_stands`, `blown_stands`, and `briefing_markdown` (**MUST contain the FULL multi-section markdown report — NOT a 1-sentence stub!**).\n5. Call `milestone_complete` and present the lake bathymetry & fishing guide clearly.",
+      "gate": {
+        "type": "json_file",
+        "path": "result.json",
+        "required_keys": ["workflow", "camp_name", "visual_findings", "briefing_markdown"],
+        "on_fail": "retry",
+        "max_retries": 1
+      }
+    }
+  ]
+}

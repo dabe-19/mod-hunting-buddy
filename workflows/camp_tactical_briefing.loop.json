@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "id": "camp_tactical_briefing",
+  "name": "Camp Tactical Briefing & Map Annotation",
+  "owner": "hunting-buddy",
+  "owner_type": "module",
+  "category": "outdoors",
+  "version": "1.0.0",
+  "description": "Concurrent FIFO pre-flight of stand scent-cone physics and 48h Open-Meteo wind shifts followed by a 200-turn ReAct tactical plan, live Leaflet GeoJSON annotations, and static camp map render.",
+  "defaults": {
+    "max_turns": 200,
+    "ipc_priority": 100,
+    "fifo_window": 16,
+    "tool_timeout_sec": 120,
+    "require_result_json": true,
+    "output_artifact": "result.json"
+  },
+  "inputs": [
+    { "name": "property_id", "type": "number", "label": "Property ID", "required": false, "default": 1 },
+    { "name": "camp", "type": "string", "label": "Camp / Property Name", "required": false },
+    { "name": "wind_deg", "type": "number", "label": "Wind Direction (°)", "required": false, "default": 315 },
+    { "name": "wind_mph", "type": "number", "label": "Wind Speed (mph)", "required": false, "default": 8 },
+    { "name": "thermal_mode", "type": "select", "label": "Thermal Mode", "required": false, "default": "neutral", "options": ["neutral", "katabatic", "upslope"] },
+    { "name": "view_bbox", "type": "string", "label": "Optional Active Map Viewport [min_lon, min_lat, max_lon, max_lat]", "required": false }
+  ],
+  "tools": {
+    "bundles": ["+hunting"],
+    "allow": [
+      "vision_analyze",
+      "hunt_plan",
+      "hunt_weather",
+      "hunt_topo",
+      "hunt_routes",
+      "hunt_plan_save",
+      "hunt_annotate",
+      "hunt_render_map",
+      "hunt_import",
+      "file_read",
+      "file_write",
+      "discord_send",
+      "discord_send_file"
+    ],
+    "deny": []
+  },
+  "phases": [
+    {
+      "id": "preflight_gis_weather",
+      "name": "Phase 1: Parallel FIFO Scent-Cone & 48h Weather Probe",
+      "kind": "fifo_parallel",
+      "enabled": true,
+      "continue_on_error": true,
+      "timeout_sec": 60,
+      "description": "Runs hunt_plan and hunt_weather concurrently via FIFO IPC before Turn 1 so stand rankings, downwind conflicts, and DNR legal shooting hours are ready immediately.",
+      "tasks": [
+        {
+          "id": "scent_plan",
+          "tool": "hunt_plan",
+          "args_template": {
+            "property_id": "{{params.property_id | 1}}",
+            "wind_deg": "{{params.wind_deg | 315}}",
+            "wind_mph": "{{params.wind_mph | 8}}",
+            "thermal_mode": "{{params.thermal_mode | neutral}}"
+          },
+          "output_key": "scent_plan"
+        },
+        {
+          "id": "weather_48h",
+          "tool": "hunt_weather",
+          "args_template": {
+            "property_id": "{{params.property_id | 1}}",
+            "days": 2
+          },
+          "output_key": "weather"
+        },
+        {
+          "id": "topo_terrain",
+          "tool": "hunt_topo",
+          "args_template": {
+            "action": "summary",
+            "property_id": "{{params.property_id | 1}}"
+          },
+          "output_key": "topo"
+        },
+        {
+          "id": "traced_routes",
+          "tool": "hunt_routes",
+          "args_template": {
+            "action": "list",
+            "property_id": "{{params.property_id | 1}}"
+          },
+          "output_key": "routes"
+        },
+        {
+          "id": "preflight_map",
+          "tool": "hunt_render_map",
+          "args_template": {
+            "property_id": "{{params.property_id | 1}}",
+            "wind_deg": "{{params.wind_deg | 315}}",
+            "wind_mph": "{{params.wind_mph | 8}}",
+            "thermal_mode": "{{params.thermal_mode | neutral}}",
+            "basemap": "hybrid",
+            "scenario_name": "Pre-Flight Visual Map",
+            "view_bbox": "{{params.view_bbox}}",
+            "publish_discord": false
+          },
+          "output_key": "preflight_map"
+        }
+      ]
+    },
+    {
+      "id": "tactical_briefing",
+      "name": "Phase 2: ReAct Visual + GIS Tactical Plan, Map Annotations & Render",
+      "kind": "react",
+      "enabled": true,
+      "max_turns": 200,
+      "tool_filter": "default",
+      "tools_allow": [],
+      "prompt_template": "Execute the Hunting Buddy Sovereign Camp Tactical Briefing workflow.\n\nINPUTS:\n- Camp / Property: {{params.camp | (active camp)}} (property_id: {{params.property_id | 1}})\n- Active Wind Scenario: {{params.wind_deg | 315}}° @ {{params.wind_mph | 8}} mph (thermal: {{params.thermal_mode | neutral}})\n- Output artifact path: {{result_path}}\n\nFIFO PRE-FLIGHT TELEMETRY & VISUAL MAP (already computed concurrently in Phase 1 — ALL `+hunting` tools + `vision_analyze` are ALREADY mounted on Turn 1, do NOT call `tool_search`):\n- Pre-Flight Rendered Hybrid Satellite Map PNG (satellite imagery, parcel lines, 1m LiDAR contours, traced streams/trails, stands & scent cones): {{phase.preflight_gis_weather.preflight_map}}\n- Stand & Scent Cone Physics: {{phase.preflight_gis_weather.scent_plan}}\n- Live Weather (`current_conditions` = RIGHT NOW, `key_hunting_windows` = upcoming dawn/evening sits — use `current_conditions`, NOT midnight `hourly[0]`!): {{phase.preflight_gis_weather.weather}}\n- Topographic Elevation, Slope Drainage & Landmarks (water sources, ridges, saddles): {{phase.preflight_gis_weather.topo}}\n- Traced Streams, Walking Trails, Driving Roads & Deer Trails: {{phase.preflight_gis_weather.routes}}\n\nMANDATORY EXECUTION STEPS (call your already-mounted tools directly):\n1. **Visual Map Inspection First:** If `preflight_map.png_path` exists, call `vision_analyze` on `preflight_map.png_path` to visually read the real satellite habitat — timber edges, swamp/marsh transitions, openings/clearings, creek bends, funnels, terrain contours, parcel boundaries, and where scent cones blow relative to cover.\n2. Combine your visual satellite findings with Phase 1 `current_conditions`, `key_hunting_windows`, stand scores, scent cones, downwind conflicts, LiDAR elevation relief, thermal drainage direction, traced trails/streams, and landmarks (only call `hunt_topo` with action='fetch_dem' if `has_dem` is false).\n3. Call `hunt_plan_save` (action=\"save\", plan_mode=\"hunt\", property_id={{params.property_id | 1}}) with your **FULL, COMPLETE tactical hunting plan** in `briefing_markdown` (NEVER a 1-sentence stub!) AND place 2-5 removable tactical map annotations (`stand_pick`, `approach_route`, `avoid_zone`, `pinch_point`, `bedding_zone`) derived from real coordinates with specific `notes` explaining WHY each spot works. WAIT for `hunt_plan_save` to return its integer `plan_id` before writing `{{result_path}}`.\n4. Call `hunt_render_map` (property_id={{params.property_id | 1}}, wind_deg={{params.wind_deg | 315}}, wind_mph={{params.wind_mph | 8}}, thermal_mode=\"{{params.thermal_mode | neutral}}\", basemap=\"hybrid\", publish_discord=false) so the final static tactical map PNG renders with your newly placed annotations.\n5. Write structured JSON to `{{result_path}}` via `file_write` with keys:\n   `workflow`, `plan_id` (the exact integer returned by `hunt_plan_save`), `plan_mode` (`\"hunt\"`), `camp_name`, `wind_summary`, `shooting_light`, `top_stands`, `blown_stands`, `annotations`, `map_path`, and `briefing_markdown` (**MUST contain the FULL multi-section markdown report — NOT a short summary!**).\n6. Call `milestone_complete` and deliver a concise deer-camp tactical briefing suitable for hunters heading out.",
+      "gate": {
+        "type": "json_file",
+        "path": "result.json",
+        "required_keys": ["workflow", "camp_name", "top_stands", "briefing_markdown"],
+        "on_fail": "retry",
+        "max_retries": 1
+      }
+    }
+  ]
+}

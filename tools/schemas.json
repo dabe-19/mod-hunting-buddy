@@ -1,0 +1,294 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "hunt_import",
+      "description": "Import hunting property parcel boundaries, waypoints, or routes from GPX/KML/KMZ/GeoJSON/county PDF/trail-cam EXIF, or auto-fetch public state GIS parcels (Wisconsin SCO/WROC) from a lat/lon coordinate.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "property_name": { "type": "string", "description": "Name of the hunting camp or property (e.g. 'Northwoods 40')." },
+          "file_path": { "type": "string", "description": "Optional path to GPX, KML, KMZ, GeoJSON, county parcel PDF, or trail-cam JPEG." },
+          "lat": { "type": "number", "description": "Latitude of property center (auto-fetches state GIS parcels if provided)." },
+          "lon": { "type": "number", "description": "Longitude of property center." },
+          "state": { "type": "string", "description": "Two-letter US state code (default WI)." },
+          "radius_m": { "type": "number", "description": "Parcel lookup radius in meters (default 800)." },
+          "visibility": { "type": "string", "enum": ["public", "channel_private"], "description": "Camp privacy visibility (defaults to public)." },
+          "channel_id": { "type": "string", "description": "Optional Discord channel ID when visibility is channel_private." }
+        },
+        "required": ["property_name"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "hunt_export",
+      "description": "Export a hunting property's stands, blinds, bedding waypoints, access trails, and parcels to GPX 1.1 or KML format for direct import back into onX Hunt or a handheld GPS.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "property_id": { "type": "integer", "description": "Property ID (defaults to active property)." },
+          "fmt": { "type": "string", "enum": ["gpx", "kml"], "description": "Output format (default gpx)." },
+          "publish_discord": { "type": "boolean", "description": "If true, publish and attach the exported file to the active Discord channel." }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "hunt_weather",
+      "description": "Fetch hyper-local Open-Meteo hourly wind speed/direction, gusts, barometric pressure trend, thermal mode, and NOAA astronomical DNR legal shooting hours.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "lat": { "type": "number", "description": "Property latitude (optional if property_id is given)." },
+          "lon": { "type": "number", "description": "Property longitude (optional if property_id is given)." },
+          "property_id": { "type": "integer", "description": "Property ID to pull coordinates from." },
+          "days": { "type": "integer", "description": "Forecast horizon in days (1-7, default 3)." }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "hunt_plan",
+      "description": "Evaluate and rank all stands/blinds on a property for a given wind direction, speed, and thermal mode, detecting downwind hunter-to-hunter scent conflicts with shapely.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "property_id": { "type": "integer", "description": "Property ID (defaults to active property)." },
+          "wind_deg": { "type": "number", "description": "Meteorological wind-FROM direction in degrees (0=N, 90=E, 180=S, 270=W)." },
+          "wind_mph": { "type": "number", "description": "Wind speed in mph (default 8)." },
+          "thermal_mode": { "type": "string", "enum": ["neutral", "upslope_warming", "katabatic_drainage"], "description": "Thermal airflow regime." }
+        },
+        "required": ["wind_deg"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "hunt_render_map",
+      "description": "Render a high-DPI matplotlib tactical aerial/topo map with parcel boundaries, stand labels, Gaussian/katabatic scent cones, live mobile hunter GPS arrows, compass rose, and scale bar. Optionally posts directly to Discord.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "property_id": { "type": "integer", "description": "Property ID (defaults to active property)." },
+          "scenario_name": { "type": "string", "description": "Map subtitle (e.g. 'Opening Morning NW Wind')." },
+          "wind_deg": { "type": "number", "description": "Wind-FROM direction in degrees." },
+          "wind_mph": { "type": "number", "description": "Wind speed in mph (default 8)." },
+          "thermal_mode": { "type": "string", "enum": ["neutral", "upslope_warming", "katabatic_drainage"] },
+          "basemap": { "type": "string", "enum": ["hybrid", "usgs_aerial", "usgs_topo", "usgs_hybrid"], "description": "Offline-cached Esri Hybrid / USGS basemap layer (default 'hybrid')." },
+          "view_bbox": { "type": "array", "items": { "type": "number" }, "description": "Optional [min_lon, min_lat, max_lon, max_lat] viewport bounds matching the active Web UI map view." },
+          "publish_discord": { "type": "boolean", "description": "If true, publish to artifact pantry and attach to Discord." }
+        },
+        "required": ["wind_deg"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "hunt_log",
+      "description": "Add or update a stand/blind/bedding/camera waypoint, log a deer sighting, or update property camp privacy (public vs channel_private).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "enum": ["add_waypoint", "add_sighting", "set_privacy", "list_properties"], "description": "Log action to perform." },
+          "property_id": { "type": "integer" },
+          "name": { "type": "string" },
+          "kind": { "type": "string", "description": "Waypoint kind: stand, blind, bedding, camera, scrape, parking, camp." },
+          "lat": { "type": "number" },
+          "lon": { "type": "number" },
+          "assigned_hunter": { "type": "string" },
+          "preferred_winds": { "type": "string", "description": "Comma-separated favorable wind directions e.g. NW,W,NNW." },
+          "species": { "type": "string" },
+          "count": { "type": "integer" },
+          "visibility": { "type": "string", "enum": ["public", "channel_private"] },
+          "notes": { "type": "string" }
+        },
+        "required": ["action"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "hunt_mobile",
+      "description": "Inspect live mobile GPS & compass heading telemetry from hunters in the field or issue a scoped X-Beacon-Token for an Android / mobile web hunting companion.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "enum": ["list_hunters", "issue_token"], "description": "Telemetry action." },
+          "property_id": { "type": "integer" },
+          "hunter_id": { "type": "string", "description": "Unique slug for hunter when issuing a beacon token." },
+          "hunter_name": { "type": "string", "description": "Display name for hunter." }
+        },
+        "required": ["action"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "hunt_plan_save",
+      "description": "Save, inspect ('get'), list, delete, or append a Follow-Up Q&A turn ('followup') to a tactical Hunting Plan in Hunting Buddy's SQLite archive so it renders in the Web UI Plans panel and persists across sessions.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "enum": ["save", "update", "get", "list", "delete", "followup"], "description": "Plan archive action (default 'save'). Use 'update' to enrich an existing plan_id; 'get' to inspect a plan + annotations + Q&A; 'followup' to persist a Q&A reply." },
+          "property_id": { "type": "integer", "description": "Property ID (defaults to active camp)." },
+          "plan_id": { "type": "integer", "description": "Plan ID (for update, get, delete, or followup)." },
+          "plan_mode": { "type": "string", "enum": ["hunt", "fish"], "description": "Plan mode: 'fish' for fishing/lake bathymetry briefings, 'hunt' for hunting briefings." },
+          "source_task_id": { "type": "string", "description": "Optional workflow task ID for deduplication." },
+          "question": { "type": "string", "description": "Hunter's follow-up question (for action='followup')." },
+          "answer_markdown": { "type": "string", "description": "Markdown tactical answer to the follow-up question (for action='followup')." },
+          "title": { "type": "string", "description": "Concise plan title (e.g. 'Opening Morning NW 8 mph Sit Plan')." },
+          "scenario_name": { "type": "string", "description": "Optional scenario label." },
+          "wind_deg": { "type": "number", "description": "Wind-FROM direction in degrees." },
+          "wind_mph": { "type": "number", "description": "Wind speed in mph." },
+          "thermal_mode": { "type": "string", "enum": ["neutral", "upslope_warming", "katabatic_drainage"] },
+          "shooting_light": { "type": "object", "description": "Legal shooting hours dict (start, end, sunrise, sunset)." },
+          "top_stands": { "type": "array", "items": { "type": "object" }, "description": "Ranked recommended stands with safety rationale." },
+          "blown_stands": { "type": "array", "items": { "type": "object" }, "description": "Stands to avoid on this wind." },
+          "briefing_markdown": { "type": "string", "description": "Full Markdown tactical hunting plan briefing." },
+          "map_png_path": { "type": "string", "description": "Optional path to rendered PNG tactical map." },
+          "annotations": {
+            "type": "array",
+            "description": "Optional removable tactical map objects (Point pins, LineString approach routes/deer corridors, Polygon bedding/avoid zones) attached to this plan.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": { "type": "string" },
+                "kind": { "type": "string", "enum": ["stand_pick", "approach_route", "deer_corridor", "bedding_zone", "pinch_point", "food_source", "avoid_zone", "callout"] },
+                "geom_type": { "type": "string", "enum": ["Point", "LineString", "Polygon"] },
+                "lat": { "type": "number" },
+                "lon": { "type": "number" },
+                "coordinates": { "type": "array", "description": "Coordinate array for Point [lon,lat], LineString [[lon,lat],...], or Polygon [[[lon,lat],...]]." },
+                "color": { "type": "string" },
+                "notes": { "type": "string" }
+              }
+            }
+          }
+        },
+        "required": ["action"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "hunt_annotate",
+      "description": "Add, list, toggle, or remove removable tactical map objects (recommended stand pins, stealth approach routes, deer travel corridors, bedding zones, pinch points, avoid zones) on the live Hunting Buddy Leaflet map.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "enum": ["add", "list", "remove", "toggle", "clear_plan"], "description": "Annotation operation." },
+          "property_id": { "type": "integer", "description": "Property ID (defaults to active camp)." },
+          "plan_id": { "type": "integer", "description": "Optional parent plan_id to group annotations as a removable layer." },
+          "annotation_id": { "type": "integer", "description": "Annotation ID (for remove/toggle)." },
+          "label": { "type": "string", "description": "Short map label (e.g. 'Stealth West Creek Approach')." },
+          "kind": { "type": "string", "enum": ["stand_pick", "approach_route", "deer_corridor", "bedding_zone", "pinch_point", "food_source", "avoid_zone", "callout"] },
+          "geom_type": { "type": "string", "enum": ["Point", "LineString", "Polygon"] },
+          "lat": { "type": "number", "description": "Latitude for Point annotations." },
+          "lon": { "type": "number", "description": "Longitude for Point annotations." },
+          "coordinates": { "type": "array", "description": "Coordinates array for LineString/Polygon/Point." },
+          "color": { "type": "string", "description": "Optional hex color override (e.g. #10b981)." },
+          "notes": { "type": "string", "description": "Tactical rationale shown in map popup." },
+          "annotations": { "type": "array", "items": { "type": "object" }, "description": "Optional batch array of annotations to add in one call." }
+        },
+        "required": ["action"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "hunt_topo",
+      "description": "Query or fetch high-resolution USGS 3DEP 1m LiDAR elevation grids (with Copernicus 30m fallback), hypsometric elevation-gradient contours (2/5/10/20 ft intervals), slope/thermal drainage vectors, and topographic/habitat landmarks (water sources, ridges, saddles, drainages, benches, uploaded LiDAR/topo features) for a hunting camp.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "enum": ["summary", "fetch_dem", "add_landmark", "delete_landmark"], "description": "Topo action (default 'summary')." },
+          "property_id": { "type": "integer", "description": "Property ID (defaults to active camp)." },
+          "contour_step_ft": { "type": "number", "description": "Optional contour interval in feet (e.g. 2, 5, 10, 20; 0 = auto)." },
+          "name": { "type": "string", "description": "Landmark name (e.g. 'North Creek Crossing')." },
+          "kind": { "type": "string", "enum": ["water_source", "ridge", "saddle", "drainage", "bench", "food_plot", "thick_cover", "access_gate", "contour"], "description": "Topographic landmark category." },
+          "lat": { "type": "number" },
+          "lon": { "type": "number" },
+          "notes": { "type": "string" },
+          "id": { "type": "integer", "description": "Landmark ID for delete_landmark." }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "hunt_routes",
+      "description": "Manage traced streams (with downstream flow direction), walking/entry trails, ATV/driving roads, deer trails, and fishing current seams; sync nationwide/global USGS NHD + OSM Overpass hydrography & roads; inspect pluggable spatial provider health or build an Offline Camp Pack.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "enum": ["list", "save", "reverse", "delete", "sync_hydro", "providers_list", "providers_health", "offline_pack"], "description": "Route / provider action (default 'list')." },
+          "property_id": { "type": "integer", "description": "Property ID (defaults to active camp)." },
+          "id": { "type": "integer", "description": "Route ID (for reverse or delete)." },
+          "name": { "type": "string", "description": "Name of stream, trail, or road (e.g. 'North Creek' or 'West Logging Road')." },
+          "kind": { "type": "string", "enum": ["stream", "walking_trail", "atv_road", "driving_road", "entry_route", "exit_route", "deer_trail", "current_seam", "drift_line"] },
+          "coordinates": { "type": "array", "description": "LineString coordinate pairs [[lon,lat], ...] (start->end = downstream for streams)." },
+          "flow_speed": { "type": "string", "enum": ["calm", "slow", "moderate", "fast"] },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "hunt_fish",
+      "description": "Guide-grade fishing, lake dossier & hydrology tool: sync & cache lakes/reservoirs/ponds (WI DNR 24K + official LakeDetail facts & SWIMS bathymetric map PDFs -> USGS NHD -> Global OSM), create/edit custom ponds (e.g. Northwoods Pond), fetch live USGS NWIS / global GloFAS river gauges, compute 0-100 Solunar & Barometric Bite Index + windward shore + species rigging matrix, manage fish structure pins, water current flow vectors, depth contour traces, and shoreline-clipped bathymetry contours.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "enum": ["analyze", "gauges", "sync_waterbodies", "save_waterbody", "delete_waterbody", "refresh_waterbody_dossier", "add_structure", "delete_structure", "add_flow", "delete_flow", "add_depth", "delete_depth", "save_contour_line", "rebuild_bathymetry", "prepare_chart_tiles", "extract_depths_from_chart", "estimate_bathymetry"], "description": "Fishing & waterbody intelligence operation (default 'analyze')." },
+          "property_id": { "type": "integer", "description": "Property / camp ID (defaults to active camp)." },
+          "id": { "type": "integer", "description": "Record ID (for update/delete/refresh actions)." },
+          "waterbody_id": { "type": "integer", "description": "Saved waterbody ID (for prepare_chart_tiles, extract_depths_from_chart, or estimate_bathymetry)." },
+          "coord_space": { "type": "string", "enum": ["aligned", "raw"], "description": "For extract_depths_from_chart: use 'aligned' when nx/ny come from prepare_chart_tiles North-up grid/quadrants (0=W/N, 1=E/S); 'raw' for unrotated original scan." },
+          "clear_prior_vision": { "type": "boolean", "description": "For extract_depths_from_chart: if true, replace prior chart_vision points for this lake." },
+          "samples": { "type": "array", "items": { "type": "object" }, "description": "For extract_depths_from_chart: list of {nx, ny, depth_ft} (normalized 0.0-1.0 coords) or {lat, lon, depth_ft}." },
+          "contour_lines": { "type": "array", "items": { "type": "object" }, "description": "For extract_depths_from_chart: list of {depth_ft, points: [{nx, ny}, ...]}." },
+          "structures": { "type": "array", "items": { "type": "object" }, "description": "For extract_depths_from_chart: list of {name, kind, nx, ny, depth_ft, notes}." },
+          "name": { "type": "string", "description": "Structure or waterbody name." },
+          "label": { "type": "string", "description": "Current flow label." },
+          "kind": { "type": "string", "enum": ["deep_hole", "drop_off", "weed_edge", "rock_pile", "submerged_timber", "point_bar", "eddy_seam", "riffle_pool", "spring_seep", "boat_launch", "shore_access"] },
+          "waterbody_type": { "type": "string", "enum": ["lake", "reservoir", "flowage", "pond", "river_pool", "slough"] },
+          "wbic": { "type": "string", "description": "Official state waterbody ID (e.g. WI DNR WBIC 540600)." },
+          "acres": { "type": "number" },
+          "max_depth_ft": { "type": "number" },
+          "mean_depth_ft": { "type": "number" },
+          "bottom_substrate": { "type": "string" },
+          "water_clarity": { "type": "string" },
+          "species": { "type": "array", "items": { "type": "string" } },
+          "public_access": { "type": "string" },
+          "lat": { "type": "number" },
+          "lon": { "type": "number" },
+          "coordinates": { "type": "array", "description": "LineString coordinates [[lon,lat],...] for save_contour_line." },
+          "depth_ft": { "type": "number" },
+          "bottom_type": { "type": "string" },
+          "target_species": { "type": "string" },
+          "flow_to_deg": { "type": "number", "description": "Compass bearing water flows TOWARD (0=N, 90=E, 180=S, 270=W)." },
+          "speed_class": { "type": "string", "enum": ["calm", "slow", "moderate", "fast"] },
+          "flow_type": { "type": "string", "enum": ["river_current", "wind_drift", "inflow", "outflow", "eddy"] },
+          "waterbody_name": { "type": "string" },
+          "wind_deg": { "type": "number" },
+          "wind_mph": { "type": "number" },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+]

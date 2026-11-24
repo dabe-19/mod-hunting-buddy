@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "id": "hunting-buddy",
+  "name": "Hunting Buddy",
+  "version": "2.6.1",
+  "author": "Blue Lodge Guild",
+  "license": "MIT",
+  "category": "outdoors",
+  "tagline": "Field & Water GIS (Hunt + Fish): resilient weather & spatial provider registry, cached lake dossiers & official DNR contour maps, shoreline-clipped bathymetry, stream/trail tracing, 1m LiDAR contours, live river gauges, and Q&A.",
+  "hardware_badges": ["no-special-hardware", "offline-capable", "zero-keys-required"],
+  "requires_core": ">=2026.11",
+  "runtime": {
+    "venv_mode": "shared_locked",
+    "python_packages": ["matplotlib", "shapely", "pyproj", "pypdf", "scipy"]
+  },
+  "provides": {
+    "tools_schema": "tools/schemas.json",
+    "tools_dispatcher": "tools/dispatch.sh",
+    "tool_bundle": "+hunting",
+    "core_tools": ["vision_analyze", "web_search", "searxng_.*", "file_read", "file_write", "discord_send", "discord_send_file"],
+    "workflows_dir": "workflows",
+    "domain_keywords": "hunt hunting deer buck fish fishing trout walleye bass musky stream river creek pond lake bathymetry depth current eddy gauge cfs trail road parcel parcels gis onx treestand stand blind scent wind thermal cabin ridge saddle pinch lidar elevation contours topography trail_cam shooting_hours gpx kml northwoods gps beacon camp_map briefing",
+    "skills": ["skills/hunting_tactics/SKILL.md"],
+    "context_hook": "hooks/context.sh",
+    "strategist_hook": "hooks/strategist.txt",
+    "slash_commands": ["commands/hunt.sh"],
+    "cron_templates": ["cron/wind_shift_watch.sh"],
+    "ui": {
+      "js": "ui/panel.js",
+      "css": "ui/panel.css"
+    }
+  },
+  "permissions": {
+    "tier": "A",
+    "network_egress": [
+      "api.open-meteo.com",
+      "api.weather.gov",
+      "flood-api.open-meteo.com",
+      "elevation.nationalmap.gov",
+      "hydro.nationalmap.gov",
+      "waterservices.usgs.gov",
+      "overpass-api.de",
+      "overpass.kumi.systems",
+      "overpass.private.coffee",
+      "basemap.nationalmap.gov",
+      "server.arcgisonline.com",
+      "services3.arcgis.com",
+      "services.arcgis.com",
+      "dnrmaps.wi.gov",
+      "apps.dnr.wi.gov",
+      "gis.charttools.noaa.gov"
+    ],
+    "filesystem_rw": [".george/module_data/hunting-buddy", ".george/artifacts"],
+    "privileged_docker": false,
+    "secrets_required": []
+  },
+  "healthcheck": "hooks/health.sh"
+}

@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "id": "plan_followup",
+  "name": "Hunting Plan Follow-Up Q&A",
+  "owner": "hunting-buddy",
+  "owner_type": "module",
+  "category": "outdoors",
+  "version": "1.0.0",
+  "description": "Answers a hunter's follow-up question about a specific saved tactical hunting plan, its map pins/pinch points, LiDAR elevation contours, and live weather, persisting the Q&A thread directly into the plan.",
+  "defaults": {
+    "max_turns": 20,
+    "ipc_priority": 100,
+    "fifo_window": 16,
+    "tool_timeout_sec": 90,
+    "require_result_json": true,
+    "output_artifact": "result.json"
+  },
+  "inputs": [
+    { "name": "property_id", "type": "number", "label": "Property ID", "required": false, "default": 1 },
+    { "name": "plan_id", "type": "number", "label": "Saved Plan ID", "required": true },
+    { "name": "camp", "type": "string", "label": "Camp Name", "required": false },
+    { "name": "question", "type": "string", "label": "Follow-Up Question", "required": true }
+  ],
+  "tools": {
+    "bundles": ["+hunting"],
+    "allow": [
+      "hunt_plan_save",
+      "hunt_annotate",
+      "hunt_plan",
+      "hunt_weather",
+      "hunt_topo",
+      "hunt_render_map",
+      "file_read",
+      "file_write"
+    ],
+    "deny": []
+  },
+  "phases": [
+    {
+      "id": "load_plan_context",
+      "name": "Phase 1: Load Saved Plan, Map Annotations, LiDAR Topo & Live Weather",
+      "kind": "fifo_parallel",
+      "enabled": true,
+      "continue_on_error": true,
+      "timeout_sec": 45,
+      "description": "Concurrently loads the saved plan, its map annotations & previous Q&A, camp topography/landmarks, and fresh weather before Turn 1.",
+      "tasks": [
+        {
+          "id": "saved_plan",
+          "tool": "hunt_plan_save",
+          "args_template": {
+            "action": "get",
+            "plan_id": "{{params.plan_id}}",
+            "property_id": "{{params.property_id | 1}}"
+          },
+          "output_key": "saved_plan"
+        },
+        {
+          "id": "topo_terrain",
+          "tool": "hunt_topo",
+          "args_template": {
+            "action": "summary",
+            "property_id": "{{params.property_id | 1}}"
+          },
+          "output_key": "topo"
+        },
+        {
+          "id": "live_weather",
+          "tool": "hunt_weather",
+          "args_template": {
+            "property_id": "{{params.property_id | 1}}",
+            "days": 2
+          },
+          "output_key": "weather"
+        }
+      ]
+    },
+    {
+      "id": "answer_followup",
+      "name": "Phase 2: Grounded Tactical Q&A Reply",
+      "kind": "react",
+      "enabled": true,
+      "max_turns": 20,
+      "tool_filter": "default",
+      "tools_allow": [],
+      "prompt_template": "Answer the hunter's follow-up question about their saved Hunting Buddy tactical plan.\n\nHUNTER QUESTION:\n{{params.question}}\n\nCONTEXT (already fetched in Phase 1 — ALL `+hunting` tools are ALREADY mounted on Turn 1, do NOT call `tool_search`):\n- Camp: {{params.camp | (active camp)}} (property_id: {{params.property_id | 1}}, plan_id: {{params.plan_id}})\n- Saved Plan, Map Annotations & Prior Q&A: {{phase.load_plan_context.saved_plan}}\n- Topographic Elevation, Slope & Landmarks: {{phase.load_plan_context.topo}}\n- Live Weather (`current_conditions` & `key_hunting_windows`): {{phase.load_plan_context.weather}}\n- Output artifact path: {{result_path}}\n\nEXECUTION STEPS:\n1. Carefully inspect the saved plan's `briefing_markdown`, its `annotations` (exact coordinates, labels, notes — e.g. pinch points, stand picks, avoid zones), the camp's LiDAR elevation/slope drainage, landmarks (ponds/creeks/ridges/saddles), and `current_conditions`.\n2. Formulate a concrete, tactical, plain-English Markdown answer directly addressing the hunter's question (cite exact landmark names, elevations, distances, wind/thermal angles, and entry/exit strategy). If the hunter explicitly asked to add or adjust a map pin/route, also call `hunt_annotate`.\n3. Persist this Q&A turn into the plan ledger by calling `hunt_plan_save` with `action=\"followup\"`, `plan_id={{params.plan_id}}`, `property_id={{params.property_id | 1}}`, `question`, and `answer_markdown`.\n4. Write structured JSON to `{{result_path}}` via `file_write` with keys: `plan_id`, `camp_name`, `question`, `answer_markdown`, and `annotations_added` (integer, 0 if none).\n5. Call `milestone_complete` with your concise answer.",
+      "gate": {
+        "type": "json_file",
+        "path": "result.json",
+        "required_keys": ["plan_id", "question", "answer_markdown"],
+        "on_fail": "retry",
+        "max_retries": 1
+      }
+    }
+  ]
+}
